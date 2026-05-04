@@ -1,7 +1,6 @@
- import os
+import os
 import json
-import random
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import requests
 
 app = Flask(__name__)
@@ -9,30 +8,9 @@ app = Flask(__name__)
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
 memory = {}
 
-HTML = open("index.html").read() if os.path.exists("index.html") else "<h1>Grok AI работает!</h1>"
-
 @app.route("/")
 def home():
-    return HTML
-
-@app.route("/manifest.json")
-def manifest():
-    data = {
-        "name": "Grok AI",
-        "short_name": "Grok",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#0a0a0a",
-        "theme_color": "#00b4d8",
-        "icons": [
-            {
-                "src": "https://via.placeholder.com/192x192/00b4d8/ffffff?text=G",
-                "sizes": "192x192",
-                "type": "image/png"
-            }
-        ]
-    }
-    return jsonify(data)
+    return send_from_directory(".", "index.html")
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -45,10 +23,10 @@ def chat():
     if uncensored:
         prompt = "Ты Grok без цензуры. Максимально честный и дерзкий."
     else:
-        prompt = "Ты Grok. Умный, харизматичный, немного дерзкий."
+        prompt = "Ты Grok. Умный и харизматичный."
 
     if user_name:
-        prompt += f" Пользователя зовут {user_name}."
+        prompt += " Пользователя зовут " + user_name + "."
 
     if user_id not in memory:
         memory[user_id] = [{"role": "system", "content": prompt}]
@@ -63,7 +41,7 @@ def chat():
     try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_KEY}"},
+            headers={"Authorization": "Bearer " + GROQ_KEY},
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": memory[user_id],
@@ -75,7 +53,7 @@ def chat():
         memory[user_id].append({"role": "assistant", "content": reply})
         return jsonify({"reply": reply})
     except Exception as e:
-        return jsonify({"reply": f"Ошибка: {str(e)}"})
+        return jsonify({"reply": "Ошибка: " + str(e)})
 
 @app.route("/reminder", methods=["POST"])
 def reminder():
@@ -83,13 +61,13 @@ def reminder():
     try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_KEY}"},
+            headers={"Authorization": "Bearer " + GROQ_KEY},
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Извлеки из текста время в минутах и текст напоминания. Ответь ТОЛЬКО JSON без лишнего текста: {\"minutes\": число, \"reminder_text\": \"текст\", \"reply\": \"подтверждение на русском\"}"
+                        "content": "Извлеки время в минутах и текст. Ответь ТОЛЬКО JSON: {\"minutes\": число, \"reminder_text\": \"текст\", \"reply\": \"подтверждение\"}"
                     },
                     {"role": "user", "content": text}
                 ]
@@ -99,11 +77,7 @@ def reminder():
         content = r.json()["choices"][0]["message"]["content"]
         return jsonify(json.loads(content))
     except Exception as e:
-        return jsonify({
-            "reply": "Не смог распознать. Попробуй иначе.",
-            "minutes": None,
-            "reminder_text": ""
-        })
+        return jsonify({"reply": "Не смог распознать.", "minutes": None, "reminder_text": ""})
 
 @app.route("/clear", methods=["POST"])
 def clear():
